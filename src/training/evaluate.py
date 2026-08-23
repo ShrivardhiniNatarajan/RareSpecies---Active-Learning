@@ -14,7 +14,7 @@ from sklearn.metrics import (
 from torch.utils.data import DataLoader
 from torchvision import models
 
-from src.training.dataset import (
+from dataset import (
     CameraTrapDataset,
     eval_transform,
     CLASS_NAMES,
