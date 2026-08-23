@@ -1,0 +1,40 @@
+project:
+  name: "RareSpecies-ActiveLearning"
+  random_seed: 42
+
+dataset:
+  metadata_file: "data/metadata/caltech_images_20210113.json"
+
+  target_classes:
+    - opossum
+    - coyote
+    - deer
+    - raccoon
+    - bobcat
+    - mountain_lion
+
+  subset_counts:
+    opossum: 1300
+    coyote: 1200
+    deer: 900
+    raccoon: 700
+    bobcat: 650
+    mountain_lion: 145
+
+paths:
+  metadata_output: "data/metadata/subset_metadata.csv"
+  raw_images: "data/raw"
+  cropped_images: "data/cropped"
+  empty_images: "data/empty"
+  splits: "data/splits"
+
+training:
+  image_size: 224
+  batch_size: 32
+  epochs: 10
+  learning_rate: 0.001
+
+active_learning:
+  seed_fraction: 0.20
+  rounds: 4
+  budget_per_round: 150
