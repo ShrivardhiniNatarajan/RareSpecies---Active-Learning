@@ -8,7 +8,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision import models
 
-from src.training.dataset import (
+from dataset import (
     CameraTrapDataset,
     train_transform,
     eval_transform,
