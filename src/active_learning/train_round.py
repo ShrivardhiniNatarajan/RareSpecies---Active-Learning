@@ -33,16 +33,24 @@ parser.add_argument(
     ],
 )
 
+parser.add_argument(
+    "--round",
+    type=int,
+    required=True,
+    choices=[1, 2],
+)
+
 args = parser.parse_args()
 
-
+ROUND = args.round
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
 TRAIN_CSV = (
     f"data/active_learning/"
-    f"{args.strategy}/labeled_round_1.csv"
+    f"{args.strategy}/"
+    f"labeled_round_{ROUND}.csv"
 )
 
 VAL_CSV = (
@@ -60,7 +68,7 @@ MODEL_DIR.mkdir(
 
 MODEL_PATH = (
     MODEL_DIR /
-    f"{args.strategy}_round_1.pth"
+    f"{args.strategy}_round_{ROUND}.pth"
 )
 
 BATCH_SIZE = 32
@@ -80,7 +88,7 @@ DEVICE = (
 
 print("=" * 60)
 print(
-    f"ACTIVE LEARNING ROUND 1 - {args.strategy.upper()}"
+    f"ACTIVE LEARNING ROUND - {args.strategy.upper()}"
 )
 print("=" * 60)
 
@@ -341,7 +349,7 @@ for epoch in range(EPOCHS):
                     args.strategy,
 
                 "round":
-                    1,
+                    ROUND,
 
                 "labeled_samples":
                     len(train_dataset),
