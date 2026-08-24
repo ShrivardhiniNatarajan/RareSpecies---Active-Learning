@@ -36,9 +36,16 @@ parser.add_argument(
     ],
 )
 
+parser.add_argument(
+    "--round",
+    type=int,
+    required=True,
+    choices=[1, 2],
+)
+
 args = parser.parse_args()
 
-
+ROUND = args.round
 # ============================================================
 # PATHS
 # ============================================================
@@ -47,12 +54,13 @@ TEST_CSV = "data/splits/test.csv"
 
 MODEL_PATH = (
     Path("models/active_learning")
-    / f"{args.strategy}_round_1.pth"
+    / f"{args.strategy}_round_{ROUND}.pth"
 )
 
 RESULTS_DIR = (
     Path("results/active_learning")
     / args.strategy
+    / f"round_{ROUND}"
 )
 
 RESULTS_DIR.mkdir(
@@ -80,11 +88,12 @@ DEVICE = (
 
 print("=" * 60)
 print(
-    f"ACTIVE LEARNING ROUND 1 EVALUATION"
+    f"ACTIVE LEARNING ROUND {ROUND} EVALUATION"
 )
 print("=" * 60)
 
 print("Strategy:", args.strategy)
+print("Round:", ROUND)
 print("Device:", DEVICE)
 print("Model:", MODEL_PATH)
 
