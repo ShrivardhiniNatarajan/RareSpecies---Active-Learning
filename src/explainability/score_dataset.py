@@ -69,59 +69,51 @@ def main():
     if not file_exists:
         writer.writeheader()
         
-    num_overlays_saved = 0
-    max_overlays = 5
-    
     print(f"Total images to process: {len(detector_results)}")
     
-    for record in tqdm(detector_results, desc="Processing images"):
+    # Flatten detections into tasks
+    tasks = []
+    for record in detector_results:
         file_name = record.get("file_name")
-        detections = record.get("detections", [])
-        
         image_path = Path("data/raw") / file_name
-        
         if not image_path.exists():
             continue
-            
-        for idx, detection in enumerate(detections):
+        for idx, detection in enumerate(record.get("detections", [])):
             record_id = f"{file_name}_{idx}"
-            if record_id in processed_records:
-                continue
-                
-            bbox = detection.get("bbox")
-            if not bbox:
-                continue
-                
-            try:
-                result, cam = analyze_detection(
-                    model=model,
-                    cam=None,
-                    image_path=image_path,
-                    bbox=bbox
-                )
-                
-                row = {
-                    "image_name": file_name,
-                    "crop_path": detection.get("crop_path", ""),
-                    "detection_index": idx,
-                    "detection_confidence": detection.get("confidence", 0.0),
-                    "predicted_species": result["predicted_species"],
-                    "classifier_confidence": result["classifier_confidence"],
-                    "daac_score": result["daac_score"]
-                }
-                
+            if record_id not in processed_records and detection.get("bbox"):
+                tasks.append((file_name, image_path, idx, detection))
+
+    import threading
+    write_lock = threading.Lock()
+
+    def process_task(task):
+        file_name, image_path, idx, detection = task
+        try:
+            result, cam = analyze_detection(
+                model=model,
+                cam=None,
+                image_path=image_path,
+                bbox=detection["bbox"]
+            )
+            row = {
+                "image_name": file_name,
+                "crop_path": detection.get("crop_path", ""),
+                "detection_index": idx,
+                "detection_confidence": detection.get("confidence", 0.0),
+                "predicted_species": result["predicted_species"],
+                "classifier_confidence": result["classifier_confidence"],
+                "daac_score": result["daac_score"]
+            }
+            with write_lock:
                 writer.writerow(row)
                 f_out.flush()
-                
-                if num_overlays_saved < max_overlays:
-                    overlay_path = Path(f"results/explainability/overlays/{Path(file_name).stem}_{idx}.jpg")
-                    create_overlay(image_path, cam, result["bbox"], overlay_path)
-                    num_overlays_saved += 1
-                    
-            except Exception as e:
-                print(f"Error processing {record_id}: {str(e)}")
-                traceback.print_exc()
-                
+        except Exception as e:
+            print(f"Error processing {file_name}_{idx}: {str(e)}")
+
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        list(tqdm(executor.map(process_task, tasks), total=len(tasks), desc="Processing detections (Parallel)"))
+
     f_out.close()
     print("Finished DAAC scoring.")
 
