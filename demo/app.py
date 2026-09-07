@@ -82,7 +82,6 @@ st.markdown("""
 /* Hide Streamlit default marks */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-[data-testid="stHeader"] {visibility: hidden;}
 
 /* Custom Fonts & Hierarchy */
 h1, h2, h3, h4, h5, h6, p, span {
