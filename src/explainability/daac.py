@@ -9,7 +9,7 @@ import torch.nn as nn
 
 from PIL import Image
 from torchvision import models, transforms
-
+from tqdm import tqdm
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
@@ -186,13 +186,12 @@ def analyze_detection(
     # Threshold CAM
     # --------------------------------------------------------
 
-    threshold = np.percentile(
-        cam,
-        80
-    )
-
+    cam_min = cam.min()
+    cam_max = cam.max()
+    cam_norm = (cam - cam_min) / (cam_max - cam_min + 1e-8)
+    
     attention_mask_crop = (
-        cam >= threshold
+        cam_norm >= 0.5
     ).astype(np.uint8)
 
     # --------------------------------------------------------
