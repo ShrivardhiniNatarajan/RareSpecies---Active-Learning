@@ -687,8 +687,8 @@ elif page == "Batch Results":
         if not all_animals:
             st.warning("No animals were detected in the processed batch.")
         else:
-            # Sort by Priority Score descending
-            all_animals.sort(key=lambda x: x["priority_score"], reverse=True)
+            # Sort by Needs Review first (True at top), then Priority Score descending
+            all_animals.sort(key=lambda x: (not x["needs_review"], -x["priority_score"]))
             
             # Build DataFrame for display
             df_data = []
