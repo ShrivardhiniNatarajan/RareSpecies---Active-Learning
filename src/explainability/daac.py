@@ -191,7 +191,7 @@ def analyze_detection(
     cam_norm = (cam - cam_min) / (cam_max - cam_min + 1e-8)
     
     attention_mask_crop = (
-        cam_norm >= 0.5
+        cam_norm >= 0.2
     ).astype(np.uint8)
 
     # --------------------------------------------------------

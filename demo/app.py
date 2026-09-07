@@ -459,7 +459,7 @@ def process_single_image(uploaded_file, detector, classifier):
         weight_tensor = torch.tensor(RARITY_WEIGHTS, dtype=probabilities.dtype, device=DEVICE)
         rarity_score = float((probabilities * weight_tensor).sum())
         
-        priority_score = (entropy / 1.79) * (rarity_score / 5.66)
+        priority_score = (entropy * rarity_score) * 10  # Scaled up for UI readability
 
         try:
             daac_res, _ = analyze_detection(
