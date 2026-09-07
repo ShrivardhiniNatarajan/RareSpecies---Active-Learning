@@ -686,8 +686,21 @@ elif page == "Batch Results":
         if not all_animals:
             st.warning("No animals were detected in the processed batch.")
         else:
-            # Sort by Needs Review first (True at top), then Priority Score descending
-            all_animals.sort(key=lambda x: (not x["needs_review"], -x["priority_score"]))
+            # Group by image to keep animal numbers in order, but sort groups by max priority
+            image_max_priority = {}
+            image_needs_review = {}
+            for a in all_animals:
+                fname = a["filename"]
+                image_max_priority[fname] = max(image_max_priority.get(fname, 0.0), a["priority_score"])
+                image_needs_review[fname] = image_needs_review.get(fname, False) or a["needs_review"]
+                
+            # Sort by: Image Needs Review (True first), Image Max Priority (descending), filename, detection_number
+            all_animals.sort(key=lambda x: (
+                not image_needs_review[x["filename"]], 
+                -image_max_priority[x["filename"]], 
+                x["filename"], 
+                x["detection_number"]
+            ))
             
             # Build DataFrame for display
             df_data = []
