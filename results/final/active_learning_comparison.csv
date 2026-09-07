@@ -1,0 +1,10 @@
+Round,Labels,Strategy,Accuracy,Macro_F1,Mountain_Lion_Recall
+0,944,Random,,,
+0,944,Uncertainty,,,
+0,944,Rarity-aware,,,
+1,1094,Random,77.01,74.25,57.14
+1,1094,Uncertainty,75.98,73.64,54.29
+1,1094,Rarity-aware,75.05,72.12,57.14
+2,1244,Random,75.98,71.92,42.86
+2,1244,Uncertainty,77.63,74.33,51.43
+2,1244,Rarity-aware,77.94,74.52,45.71
