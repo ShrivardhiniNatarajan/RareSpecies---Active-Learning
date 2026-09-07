@@ -15,6 +15,8 @@ from torchvision import models
 
 from PytorchWildlife.models import detection as pw_detection
 
+from src.explainability.daac import analyze_detection
+
 # ============================================================
 # CONFIGURATION
 # ============================================================
@@ -448,6 +450,26 @@ def process_single_image(uploaded_file, detector, classifier):
             ).sum()
         )
         
+        # --------------------------------------------
+        # Active Learning Scores & DAAC
+        # --------------------------------------------
+        RARITY_WEIGHTS = [0.049, 0.049, 0.067, 0.072, 0.101, 5.661]
+        weight_tensor = torch.tensor(RARITY_WEIGHTS, dtype=probabilities.dtype, device=DEVICE)
+        rarity_score = float((probabilities * weight_tensor).sum())
+        
+        priority_score = (entropy / 1.79) * (rarity_score / 5.66)
+
+        try:
+            daac_res, _ = analyze_detection(
+                model=classifier,
+                cam=None,
+                image_path=temp_path,
+                bbox=[x1, y1, x2, y2]
+            )
+            daac_score = daac_res["daac_score"]
+        except Exception:
+            daac_score = 0.0
+
         needs_review = predicted_confidence < REVIEW_THRESHOLD
         
         # Create base64 thumbnail for dataframe display
@@ -467,6 +489,9 @@ def process_single_image(uploaded_file, detector, classifier):
             "predicted_confidence": predicted_confidence,
             "confidence": confidence,
             "entropy": entropy,
+            "rarity_score": rarity_score,
+            "priority_score": priority_score,
+            "daac_score": daac_score,
             "needs_review": needs_review
         })
         
@@ -659,8 +684,8 @@ elif page == "Batch Results":
         if not all_animals:
             st.warning("No animals were detected in the processed batch.")
         else:
-            # Sort with Needs Review at the top
-            all_animals.sort(key=lambda x: not x["needs_review"])
+            # Sort by Priority Score descending
+            all_animals.sort(key=lambda x: x["priority_score"], reverse=True)
             
             # Build DataFrame for display
             df_data = []
@@ -670,8 +695,10 @@ elif page == "Batch Results":
                     "Filename": a["filename"],
                     "Species": a["predicted_species"].replace('_', ' ').title(),
                     "Classifier Confidence": a["predicted_confidence"],
-                    "Detector Confidence": a["confidence"],
+                    "Priority Score": round(a["priority_score"], 4),
+                    "DAAC Score": round(a["daac_score"], 4),
                     "Uncertainty": round(a["entropy"], 3),
+                    "Rarity": round(a["rarity_score"], 3),
                     "Review Status": "🔴 Needs Review" if a["needs_review"] else "🟢 Auto-Processed"
                 })
             
@@ -681,24 +708,28 @@ elif page == "Batch Results":
                 df,
                 column_config={
                     "Thumbnail": st.column_config.ImageColumn(
-                        "Crop", help="Animal crop"
+                        "Preview",
+                        help="Cropped animal detection"
                     ),
                     "Classifier Confidence": st.column_config.ProgressColumn(
                         "Classifier Conf",
-                        help="Confidence score of the classifier",
-                        format="%.2f",
-                        min_value=0,
-                        max_value=1,
+                        min_value=0.0,
+                        max_value=1.0,
+                        format="%.2f"
                     ),
-                    "Detector Confidence": st.column_config.ProgressColumn(
-                        "Detector Conf",
-                        help="Confidence score of the detector",
-                        format="%.2f",
-                        min_value=0,
-                        max_value=1,
-                    )
+                    "Priority Score": st.column_config.ProgressColumn(
+                        "Priority",
+                        min_value=0.0,
+                        max_value=1.0,
+                        format="%.4f"
+                    ),
+                    "DAAC Score": st.column_config.ProgressColumn(
+                        "DAAC",
+                        min_value=0.0,
+                        max_value=1.0,
+                        format="%.4f"
+                    ),
                 },
-                use_container_width=True,
                 hide_index=True,
                 height=400
             )
