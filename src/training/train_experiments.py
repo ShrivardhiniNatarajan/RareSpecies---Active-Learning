@@ -81,7 +81,7 @@ def main() -> None:
         raise FileNotFoundError(f"Validation CSV not found: {val_csv}")
 
     print("=" * 64)
-    print(f"EXPERIMENT {args.experiment} ?" {args.strategy.upper()} ROUND {round_number}")
+    print(f"EXPERIMENT {args.experiment} - {args.strategy.upper()} ROUND {round_number}")
     print("=" * 64)
     
     train_dataset = CameraTrapDataset(str(train_csv), transform=train_transform)
