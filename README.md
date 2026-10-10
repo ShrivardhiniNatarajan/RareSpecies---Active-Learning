@@ -1,50 +1,81 @@
-# RareCam
+# RareCam: Rare-Species-Focused Active Learning with Detection-Aligned Attention Consistency
 
-An active-learning system for wildlife camera-trap image classification focusing on underrepresented species.
+RareCam is an end-to-end camera-trap pipeline built to investigate how active learning strategies impact the recall of rare species. Automated wildlife monitoring pipelines often prioritize overall accuracy, which is naturally dominated by abundant species. RareCam evaluates random, uncertainty-based, and rarity-aware acquisition strategies on a highly imbalanced dataset to measure true performance on conservation-priority species.
 
-## Problem & Motivation
-Large camera-trap datasets require significant human effort to label. While object detection (like MegaDetector) can automate finding animals, species classification often struggles with class imbalance (e.g., thousands of deer, but very few mountain lions). 
+## Research Problem and Motivation
+Camera traps generate millions of images per survey. While deep learning greatly reduces manual review effort, active learning is required to select the most informative images to label. However, standard uncertainty sampling optimizes for overall accuracy and can leave rare species with poor recall. RareCam empirically investigates whether rarity-weighted active learning can outperform standard uncertainty sampling for rare species recognition.
 
-## Objectives
-1. Automatically detect animals using MegaDetector V6.
-2. Classify species using a ResNet-50 transfer-learning baseline.
-3. Use active learning to prioritize informative cases for human review.
-4. Enhance explainability using Detection-Aligned Attention Consistency (DAAC).
+## Dataset and Sequence-Aware Splitting
+We use a six-class subset of the **Caltech Camera Traps** dataset (4,895 images):
+- Opossum (1,300), Coyote (1,200), Deer (900), Raccoon (700), Bobcat (650), Mountain Lion (145).
 
-## Dataset & Architecture
-- **Dataset**: Caltech Camera Traps (LILA BC) - subset of 4,895 images (6,558 crops).
-- **Target Classes**: opossum, coyote, deer, raccoon, bobcat, mountain_lion (primary rare target).
-- **Detector**: MegaDetector V6 (YOLOv10-c).
-- **Classifier**: ResNet-50 (ImageNet transfer learning).
-- **Data Split**: Sequence-aware splitting ensures no sequence leakage between train, validation, and test.
+To prevent data leakage, the dataset is split using a **sequence-aware** algorithm. Images from the same burst/event (`seq_id`) are never split across train, validation, and test sets, ensuring the model generalizes to new events rather than memorizing backgrounds.
 
-## DAAC Contribution
-Detection-Aligned Attention Consistency (DAAC) measures how well the classifier's visual attention (Grad-CAM) aligns with the bounding box automatically provided by MegaDetector. A high DAAC score implies the model is looking at the animal; a low score implies it is relying on background features. This provides an automated explainability metric without requiring costly human-drawn attention masks.
+## Pipeline Architecture
+1. **Detection (MegaDetector V6):** Detects and crops animals, removing empty frames.
+2. **Classification (ResNet-50):** A transfer-learning classifier trained on the padded crops.
+3. **Active Learning Loop:** Simulates a human-in-the-loop by selecting 150 unlabeled crops per round to be added to the training set.
+4. **Explainability (DAAC):** A novel attention metric to support human review.
 
-## Experiments & Results
-Active learning simulates a human labeling budget. We compared Random Sampling, Uncertainty Sampling (Predictive Entropy), and Rarity-Aware Sampling.
+### Detection-Aligned Attention Consistency (DAAC)
+DAAC measures the intersection between the ResNet-50's Grad-CAM heatmap ($R$) and the MegaDetector bounding box ($B$):
+$DAAC = \frac{|R \cap B|}{|R|}$
+It uses the free detector box as the ground-truth attention mask, flagging predictions where the model is looking strictly at the background context rather than the animal.
 
-**Full-Data Baseline**:
-- Test accuracy: 82.06%
-- Mountain-lion recall: 74.29%
+## Active-Learning Strategies
+- **Random:** Uniform random sampling from the unlabeled pool.
+- **Uncertainty:** Highest predictive entropy.
+- **Rarity-Aware:** Entropy weighted by the inverse of the predicted class's frequency in the labeled set.
 
-**Active Learning (At 1,244 labels)**:
-- Rarity-aware sampling achieves the best overall accuracy (77.94%) and macro-F1 (74.52%).
-- Uncertainty sampling achieves the best mountain-lion recall (51.43%).
-- *Honest Limitation*: Rarity-aware sampling does **not** currently beat uncertainty sampling on the specific mountain-lion target metric. 
+## Experimental Results
+A full-data baseline achieved **82.06% accuracy** but only **74.29% mountain-lion recall**, confirming the motivating problem. 
+After multiple rounds of active learning, we evaluated three configurations:
+1. Standard fine-tuning
+2. Transfer Learning with Head Warmup (Experiment B)
+3. Class-balanced Inverse-Square-Root Weights (Experiment C)
 
-## Git Workflow
-We use feature branches and conventional commits (`feat:`, `fix:`, `docs:`) to maintain a clean history. Large artifacts are ignored via `.gitignore` and stored externally.
+**Experiment B (Backbone freezing for 3 epochs followed by fine-tuning)** achieved the highest Validation Macro-F1. However, uncertainty sampling generally maintained higher mountain-lion recall than rarity-aware sampling, demonstrating that simple rarity-weighting is not a panacea. 
+DAAC analysis revealed no correlation with misclassification (AUROC 0.426), proving that camera-trap classifiers legitimately rely on habitat context immediately outside the bounding box.
 
-## How to Run the Demo
-
-Activate the environment and run Streamlit:
-```powershell
-camtrap-env\Scripts\activate
-streamlit run demo\app.py
+## Setup and Installation
+1. Clone the repository and install dependencies.
+```bash
+git clone https://github.com/ShrivardhiniNatarajan/RareSpecies---Active-Learning.git
+cd RareSpecies---Active-Learning
+python -m venv camtrap-env
+# Activate virtual environment (Windows)
+.\camtrap-env\Scripts\Activate.ps1
+# Activate (Linux/Mac)
+source camtrap-env/bin/activate
+pip install -r requirements.txt
 ```
-The demo includes full batch processing and priority queueing using Uncertainty, Rarity, and DAAC scoring.
 
-## Future Work
-- Complete Round 3 of active learning (requires GPU/Kaggle).
-- Evaluate a combined metric: Uncertainty + Rarity + DAAC to select review images.
+2. Download the data from Google Drive (Requires Colab):
+```bash
+python scripts/restore_round3_assets.py
+```
+
+## How to Reproduce Training and Evaluation
+Run the unified experiment script (e.g., Experiment B):
+```bash
+python -m src.training.train_experiments --strategy uncertainty --round 3 --experiment B
+python -m src.training.evaluate_experiments --strategy uncertainty --round 3 --experiment B
+```
+
+To generate the final figures and visualizations:
+```bash
+python scripts/generate_final_plots.py
+```
+Generated artifacts (CSV results, plots, and confusion matrices) are saved to `results/experiments/` and `results/final/`.
+
+## Streamlit Demo
+A local Streamlit app is provided for interactive inference, DAAC visualization, and review-queue sorting.
+```bash
+streamlit run demo/app.py
+```
+The app strictly sorts "Needs Review" items (low confidence or low DAAC) to the top of the queue.
+
+## Known Limitations
+- Simulated active learning relies on a pre-labeled pool rather than timing real human annotation.
+- Rarity is defined relative to the dataset frequency, not biological IUCN rarity.
+- Only two rounds were fully evaluated in the initial paper draft due to compute constraints.
