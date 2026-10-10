@@ -76,21 +76,18 @@ def load_detector_results():
         return json.load(f)
 
 
-def calculate_iou(mask_a, mask_b):
+def calculate_daac_math(attention_mask, detector_mask):
     intersection = np.logical_and(
-        mask_a,
-        mask_b
+        attention_mask,
+        detector_mask
     ).sum()
 
-    union = np.logical_or(
-        mask_a,
-        mask_b
-    ).sum()
+    attention_area = attention_mask.sum()
 
-    if union == 0:
+    if attention_area == 0:
         return 0.0
 
-    return float(intersection / union)
+    return float(intersection / attention_area)
 
 
 def analyze_detection(
@@ -116,18 +113,23 @@ def analyze_detection(
         int(v) for v in bbox
     ]
 
-    # Clamp bounding box
-    x1 = max(0, min(x1, width - 1))
-    y1 = max(0, min(y1, height - 1))
-    x2 = max(x1 + 1, min(x2, width))
-    y2 = max(y1 + 1, min(y2, height))
+    box_width = x2 - x1
+    box_height = y2 - y1
+
+    padding_x = int(box_width * 0.10)
+    padding_y = int(box_height * 0.10)
+
+    crop_x1 = max(0, x1 - padding_x)
+    crop_y1 = max(0, y1 - padding_y)
+    crop_x2 = min(width, x2 + padding_x)
+    crop_y2 = min(height, y2 + padding_y)
 
     # --------------------------------------------------------
-    # Animal crop
+    # Animal crop (with 10% padding to match classifier training)
     # --------------------------------------------------------
 
     crop = image.crop(
-        (x1, y1, x2, y2)
+        (crop_x1, crop_y1, crop_x2, crop_y2)
     )
 
     input_tensor = transform(
@@ -173,8 +175,8 @@ def analyze_detection(
         )[0]
 
     # Resize CAM to crop dimensions
-    crop_width = x2 - x1
-    crop_height = y2 - y1
+    crop_width = crop_x2 - crop_x1
+    crop_height = crop_y2 - crop_y1
 
     cam = cv2.resize(
         cam,
@@ -204,8 +206,8 @@ def analyze_detection(
     )
 
     attention_mask_full[
-        y1:y2,
-        x1:x2
+        crop_y1:crop_y2,
+        crop_x1:crop_x2
     ] = attention_mask_crop
 
     # --------------------------------------------------------
@@ -226,7 +228,7 @@ def analyze_detection(
     # DAAC
     # --------------------------------------------------------
 
-    daac_score = calculate_iou(
+    daac_score = calculate_daac_math(
         attention_mask_full,
         detector_mask
     )

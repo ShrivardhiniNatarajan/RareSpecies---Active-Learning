@@ -82,6 +82,8 @@ def main():
             record_id = f"{file_name}_{idx}"
             if record_id not in processed_records and detection.get("bbox"):
                 tasks.append((file_name, image_path, idx, detection))
+                
+    tasks = tasks[:100]  # LIMIT TO 100 FOR FAST STATS
 
     import threading
     write_lock = threading.Lock()

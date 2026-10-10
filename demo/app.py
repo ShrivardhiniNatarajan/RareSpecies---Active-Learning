@@ -33,9 +33,8 @@ CLASS_NAMES = [
     "mountain_lion",
 ]
 
-MODEL_PATH = Path(
-    "models/baseline_resnet50.pth"
-)
+ROOT_DIR = Path(__file__).resolve().parent.parent
+MODEL_PATH = ROOT_DIR / "models" / "baseline_resnet50.pth"
 
 DEVICE = (
     "cuda"
