@@ -73,3 +73,10 @@ experiments/*/checkpoints/
 .idea/
 .DS_Store
 Thumbs.db
+
+# ============================================================
+# Node.js
+# ============================================================
+node_modules/
+frontend/node_modules/
+frontend/dist/

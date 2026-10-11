@@ -1,0 +1,13 @@
+{
+  "name": "rarecam",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"API,WEB\" -c \"cyan,green\" \"python -m uvicorn api.server:app --port 8000\" \"npm run dev --prefix frontend\"",
+    "dev:api": "python -m uvicorn api.server:app --port 8000",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build:frontend": "npm run build --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
