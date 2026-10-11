@@ -61,6 +61,25 @@ def train_one_configuration(margin, seed, is_phase_0=False):
         except Exception as e:
             print(f"Warning checking resume status: {e}")
 
+    # For Phase 1 margin 0.0: reuse completed Phase 0 baseline runs directly
+    if not is_phase_0 and margin == 0.0:
+        p0_chk = RESULTS_DIR / f"phase0_margin_0.0_seed{seed}.pth"
+        p0_preds = RESULTS_DIR / f"preds_phase0_margin_0.0_seed{seed}.csv"
+        if p0_chk.exists() and p0_preds.exists():
+            print(f"[REUSE] Phase 1 margin 0.0 seed {seed} inherited from Phase 0 baseline.")
+            if not chk_path.exists():
+                shutil.copy2(p0_chk, chk_path)
+            if not preds_path.exists():
+                shutil.copy2(p0_preds, preds_path)
+            if ALL_RUNS_CSV.exists():
+                df_runs = pd.read_csv(ALL_RUNS_CSV)
+                p0_row = df_runs[(df_runs["phase"].astype(str) == "0") & (df_runs["config"] == "margin_0.0") & (df_runs["seed"] == seed)]
+                if not p0_row.empty:
+                    p1_row = p0_row.copy()
+                    p1_row["phase"] = "1"
+                    p1_row.to_csv(ALL_RUNS_CSV, mode='a', header=False, index=False)
+            return
+
     set_seed(seed)
     train_transform, eval_transform = get_transforms()
     
