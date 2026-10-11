@@ -65,8 +65,23 @@ def calculate_all_metrics(y_true, y_pred, class_names):
         
     return acc, macro_f1, per_class
 
-def log_result(csv_path, phase, config_name, seed, val_acc, test_acc, macro_f1, per_class_recalls, commit_hash=""):
-    """Appends a row to the all_runs.csv file safely."""
+import subprocess
+import shutil
+from pathlib import Path
+import torch
+import torchvision
+
+def get_git_commit():
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL).decode("utf-8").strip()
+    except Exception:
+        return "unknown"
+
+def log_result(csv_path, phase, config_name, seed, val_acc, test_acc, macro_f1, per_class_recalls, commit_hash=None):
+    """Appends a row to the all_runs.csv file safely and mirrors to Drive if mounted."""
+    if commit_hash is None:
+        commit_hash = get_git_commit()
+        
     row = {
         "phase": phase,
         "config": config_name,
@@ -74,12 +89,26 @@ def log_result(csv_path, phase, config_name, seed, val_acc, test_acc, macro_f1, 
         "val_accuracy": val_acc,
         "test_accuracy": test_acc,
         "macro_f1": macro_f1,
+        "torch_version": torch.__version__,
+        "torchvision_version": torchvision.__version__,
         "commit_hash": commit_hash
     }
     row.update(per_class_recalls)
     
     df_row = pd.DataFrame([row])
+    csv_path = Path(csv_path)
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
     if csv_path.exists():
         df_row.to_csv(csv_path, mode='a', header=False, index=False)
     else:
         df_row.to_csv(csv_path, mode='w', header=True, index=False)
+        
+    # Mirror to Drive if available
+    drive_root = Path("/content/gdrive/MyDrive/RareCam")
+    if drive_root.exists():
+        drive_res = drive_root / "results" / "context_study"
+        drive_res.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(csv_path, drive_res / csv_path.name)
+        except Exception as e:
+            print(f"Warning: Could not sync {csv_path.name} to Drive: {e}")

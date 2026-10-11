@@ -40,6 +40,24 @@ def get_transforms():
     return train_transform, eval_transform
 
 def train_one_configuration(margin, seed, is_phase_0=False):
+    phase = "0" if is_phase_0 else "1"
+    config_name = f"margin_{margin}"
+    chk_path = RESULTS_DIR / f"phase{phase}_{config_name}_seed{seed}.pth"
+    preds_path = RESULTS_DIR / f"preds_phase{phase}_{config_name}_seed{seed}.csv"
+    
+    # Resumability check: skip if already executed and logged
+    if chk_path.exists() and preds_path.exists() and ALL_RUNS_CSV.exists():
+        try:
+            df_runs = pd.read_csv(ALL_RUNS_CSV)
+            existing = df_runs[(df_runs["phase"].astype(str) == str(phase)) & 
+                               (df_runs["config"] == config_name) & 
+                               (df_runs["seed"] == seed)]
+            if not existing.empty:
+                print(f"[RESUME] Skipping already completed run: Phase {phase} | {config_name} | Seed {seed}")
+                return
+        except Exception as e:
+            print(f"Warning checking resume status: {e}")
+
     set_seed(seed)
     train_transform, eval_transform = get_transforms()
     
@@ -48,10 +66,12 @@ def train_one_configuration(margin, seed, is_phase_0=False):
     test_ds = DynamicContextDataset(SPLITS_DIR / "test.csv", IMAGES_DIR, DETECTIONS_JSON, CLASS_NAMES, margin=margin, transform=eval_transform)
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    nw = 2 if device == "cuda" else 0
+    pm = (device == "cuda")
     
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, pin_memory=True)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True)
-    test_loader = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=nw, pin_memory=pm)
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=nw, pin_memory=pm)
+    test_loader = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=nw, pin_memory=pm)
     
     model = SingleStreamResNet(num_classes=len(CLASS_NAMES)).to(device)
     criterion = nn.CrossEntropyLoss()
@@ -80,6 +100,7 @@ def train_one_configuration(margin, seed, is_phase_0=False):
                 val_labels.extend(labels.numpy())
                 
         val_acc, _, _ = calculate_all_metrics(np.array(val_labels), np.array(val_preds), CLASS_NAMES)
+        print(f"Phase {phase} | {config_name} | Seed {seed} | Epoch {epoch+1:02d}/{MAX_EPOCHS} | Val Acc: {val_acc:.4f}")
         
         if val_acc > best_val_acc:
             best_val_acc = val_acc
@@ -98,15 +119,29 @@ def train_one_configuration(margin, seed, is_phase_0=False):
             
     test_acc, test_macro, per_class = calculate_all_metrics(np.array(test_labels), np.array(test_preds), CLASS_NAMES)
     
-    phase = "0" if is_phase_0 else "1"
-    config_name = f"margin_{margin}"
-    
     # Save checkpoint
-    chk_path = RESULTS_DIR / f"phase{phase}_{config_name}_seed{seed}.pth"
     torch.save(best_state, chk_path)
     
+    # Save per-sample test predictions
+    df_preds = pd.DataFrame({
+        "y_true": test_labels,
+        "y_pred": test_preds
+    })
+    df_preds.to_csv(preds_path, index=False)
+    
+    # Mirror checkpoint and predictions to Drive if mounted
+    drive_root = Path("/content/gdrive/MyDrive/RareCam")
+    if drive_root.exists():
+        drive_res = drive_root / "results" / "context_study"
+        drive_res.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(chk_path, drive_res / chk_path.name)
+            shutil.copy2(preds_path, drive_res / preds_path.name)
+        except Exception as e:
+            print(f"Warning: Could not sync checkpoint to Drive: {e}")
+            
     log_result(ALL_RUNS_CSV, phase, config_name, seed, best_val_acc, test_acc, test_macro, per_class)
-    print(f"Phase {phase} | Config: {config_name} | Seed: {seed} | Val Acc: {best_val_acc:.4f} | Test Acc: {test_acc:.4f}")
+    print(f"=== COMPLETED: Phase {phase} | Config: {config_name} | Seed: {seed} | Val Acc: {best_val_acc:.4f} | Test Acc: {test_acc:.4f} ===")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
