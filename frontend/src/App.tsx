@@ -31,6 +31,28 @@ export const App: React.FC = () => {
   useEffect(() => {
     checkHealth();
     const interval = setInterval(checkHealth, 10000);
+
+    const params = new URLSearchParams(window.location.search);
+    const pageParam = params.get('page');
+    if (pageParam === 'batch' || pageParam === 'about' || pageParam === 'upload') {
+      setCurrentPage(pageParam as PageId);
+    }
+    if (params.get('demo') === '1' || pageParam === 'batch') {
+      import('./api/client').then(({ loadDemoResults }) => {
+        loadDemoResults().then(data => {
+          setDetections(data);
+          setIsDemoMode(true);
+          const detParam = params.get('detail');
+          if (detParam !== null) {
+            const idx = parseInt(detParam, 10);
+            if (!isNaN(idx) && idx >= 0 && idx < data.length) {
+              setSelectedDetectionIndex(idx);
+            }
+          }
+        }).catch(() => {});
+      });
+    }
+
     return () => clearInterval(interval);
   }, []);
 

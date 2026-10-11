@@ -68,12 +68,68 @@ python scripts/generate_final_plots.py
 ```
 Generated artifacts (CSV results, plots, and confusion matrices) are saved to `results/experiments/` and `results/final/`.
 
-## Streamlit Demo
-A local Streamlit app is provided for interactive inference, DAAC visualization, and review-queue sorting.
+## User Interface: React HUD Frontend & Streamlit Fallback
+
+RareCam features a high-performance **React 18 + Vite + TypeScript + Tailwind CSS** frontend styled with a Wildlife HUD theme (deep slate green, cyan viewfinder brackets, monospace metrics, and offline demo support).
+
+### 1. Running the Full Stack (React Frontend + FastAPI Backend)
+Run the root concurrent command to launch both the FastAPI inference server and the Vite frontend:
+```bash
+# In the repository root:
+npm install
+npm install --prefix frontend
+npm run dev
+```
+- **React Frontend:** `http://localhost:5173`
+- **FastAPI Backend:** `http://127.0.0.1:8000` (docs at `http://127.0.0.1:8000/docs`)
+
+You can also run them independently in separate terminals:
+```bash
+# Terminal 1: Backend API
+python -m uvicorn api.server:app --port 8000
+
+# Terminal 2: React UI
+npm run dev --prefix frontend
+```
+
+### 2. Streamlit Fallback App
+The original Streamlit application remains untouched and fully available as a fallback:
 ```bash
 streamlit run demo/app.py
 ```
-The app strictly sorts "Needs Review" items (low confidence or low DAAC) to the top of the queue.
+
+### 3. API Schema (`api/server.py`)
+- **`GET /api/health`**
+  - Returns backend readiness, device (`cuda` or `cpu`), detection model status, classifier status, and class labels.
+- **`POST /api/analyze`**
+  - Accepts a single multipart image file (`file: UploadFile`).
+  - Returns detection results with exact backend fields:
+    ```json
+    {
+      "filename": "survey_frame.jpg",
+      "no_animal": false,
+      "detections": [
+        {
+          "filename": "survey_frame.jpg",
+          "animal_index": 1,
+          "species": "raccoon",
+          "classifier_confidence": 0.9525,
+          "detector_confidence": 0.8617,
+          "uncertainty": 0.2337,
+          "uncertainty_unit": "nats",
+          "rarity": 0.0758,
+          "priority": 0.1771,
+          "daac": 1.0,
+          "review_status": "AUTO-PROCESSED",
+          "bbox": [0.35, 0.45, 0.10, 0.15],
+          "frame_image": "data:image/jpeg;base64,...",
+          "crop_image": "data:image/jpeg;base64,...",
+          "gradcam_overlay": "data:image/jpeg;base64,..."
+        }
+      ]
+    }
+    ```
+
 
 ## Known Limitations
 - Simulated active learning relies on a pre-labeled pool rather than timing real human annotation.
