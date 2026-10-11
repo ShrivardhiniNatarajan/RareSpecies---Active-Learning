@@ -81,31 +81,51 @@ def train_phase2(ablation_mode, margin, seed):
     best_val_acc = -1
     best_state = None
     
-    for epoch in range(MAX_EPOCHS):
-        model.train()
-        for tight, context, labels in train_loader:
-            tight, context, labels = tight.to(device), context.to(device), labels.to(device)
-            optimizer.zero_grad()
-            logits = model(tight, context)
-            loss = criterion(logits, labels)
-            loss.backward()
-            optimizer.step()
+    # Fast recovery if checkpoint already exists on disk
+    if chk_path.exists() and not preds_path.exists():
+        try:
+            print(f"[RECOVER] Found checkpoint {chk_path.name}, evaluating without retraining...")
+            best_state = torch.load(chk_path, map_location=device)
+            model.load_state_dict(best_state)
+            model.eval()
+            val_preds, val_labels = [], []
+            with torch.no_grad():
+                for tight, context, labels in val_loader:
+                    tight, context = tight.to(device), context.to(device)
+                    val_preds.extend(model(tight, context).argmax(1).cpu().numpy())
+                    val_labels.extend(labels.numpy())
+            best_val_acc, _, _ = calculate_all_metrics(np.array(val_labels), np.array(val_preds), CLASS_NAMES)
+            print(f"[RECOVER] Recovered best validation accuracy: {best_val_acc:.4f}")
+        except Exception as e:
+            print(f"Could not reuse checkpoint ({e}), retraining from scratch...")
+            best_state = None
             
-        model.eval()
-        val_preds, val_labels = [], []
-        with torch.no_grad():
-            for tight, context, labels in val_loader:
-                tight, context = tight.to(device), context.to(device)
+    if best_state is None:
+        for epoch in range(MAX_EPOCHS):
+            model.train()
+            for tight, context, labels in train_loader:
+                tight, context, labels = tight.to(device), context.to(device), labels.to(device)
+                optimizer.zero_grad()
                 logits = model(tight, context)
-                val_preds.extend(logits.argmax(1).cpu().numpy())
-                val_labels.extend(labels.numpy())
+                loss = criterion(logits, labels)
+                loss.backward()
+                optimizer.step()
                 
-        val_acc, _, _ = calculate_all_metrics(np.array(val_labels), np.array(val_preds), CLASS_NAMES)
-        print(f"Phase 2 | {ablation_mode} | Seed {seed} | Epoch {epoch+1:02d}/{MAX_EPOCHS} | Val Acc: {val_acc:.4f}")
-        
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            best_state = copy.deepcopy(model.state_dict())
+            model.eval()
+            val_preds, val_labels = [], []
+            with torch.no_grad():
+                for tight, context, labels in val_loader:
+                    tight, context = tight.to(device), context.to(device)
+                    logits = model(tight, context)
+                    val_preds.extend(logits.argmax(1).cpu().numpy())
+                    val_labels.extend(labels.numpy())
+                    
+            val_acc, _, _ = calculate_all_metrics(np.array(val_labels), np.array(val_preds), CLASS_NAMES)
+            print(f"Phase 2 | {ablation_mode} | Seed {seed} | Epoch {epoch+1:02d}/{MAX_EPOCHS} | Val Acc: {val_acc:.4f}")
+            
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                best_state = copy.deepcopy(model.state_dict())
             
     # Evaluate on test with best model
     model.load_state_dict(best_state)

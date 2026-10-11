@@ -1,18 +1,21 @@
 """Training script for Phase 0 (tight crops) and Phase 1 (context-margin sweep)."""
 import argparse
 import copy
+import shutil
+from pathlib import Path
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision import transforms
+import random
+import numpy as np
 
 from src.context_study.config import *
 from src.context_study.dataset import DynamicContextDataset
 from src.context_study.models import SingleStreamResNet
 from src.context_study.utils_metrics import calculate_all_metrics, log_result
-import random
-import numpy as np
 
 def set_seed(seed):
     random.seed(seed)
@@ -80,31 +83,51 @@ def train_one_configuration(margin, seed, is_phase_0=False):
     best_val_acc = -1
     best_state = None
     
-    for epoch in range(MAX_EPOCHS):
-        model.train()
-        for images, labels, _ in train_loader:
-            images, labels = images.to(device), labels.to(device)
-            optimizer.zero_grad()
-            logits = model(images)
-            loss = criterion(logits, labels)
-            loss.backward()
-            optimizer.step()
+    # Fast recovery if checkpoint already exists on disk
+    if chk_path.exists() and not preds_path.exists():
+        try:
+            print(f"[RECOVER] Found checkpoint {chk_path.name}, evaluating without retraining...")
+            best_state = torch.load(chk_path, map_location=device)
+            model.load_state_dict(best_state)
+            model.eval()
+            val_preds, val_labels = [], []
+            with torch.no_grad():
+                for images, labels, _ in val_loader:
+                    images = images.to(device)
+                    val_preds.extend(model(images).argmax(1).cpu().numpy())
+                    val_labels.extend(labels.numpy())
+            best_val_acc, _, _ = calculate_all_metrics(np.array(val_labels), np.array(val_preds), CLASS_NAMES)
+            print(f"[RECOVER] Recovered best validation accuracy: {best_val_acc:.4f}")
+        except Exception as e:
+            print(f"Could not reuse checkpoint ({e}), retraining from scratch...")
+            best_state = None
             
-        model.eval()
-        val_preds, val_labels = [], []
-        with torch.no_grad():
-            for images, labels, _ in val_loader:
-                images = images.to(device)
+    if best_state is None:
+        for epoch in range(MAX_EPOCHS):
+            model.train()
+            for images, labels, _ in train_loader:
+                images, labels = images.to(device), labels.to(device)
+                optimizer.zero_grad()
                 logits = model(images)
-                val_preds.extend(logits.argmax(1).cpu().numpy())
-                val_labels.extend(labels.numpy())
+                loss = criterion(logits, labels)
+                loss.backward()
+                optimizer.step()
                 
-        val_acc, _, _ = calculate_all_metrics(np.array(val_labels), np.array(val_preds), CLASS_NAMES)
-        print(f"Phase {phase} | {config_name} | Seed {seed} | Epoch {epoch+1:02d}/{MAX_EPOCHS} | Val Acc: {val_acc:.4f}")
-        
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            best_state = copy.deepcopy(model.state_dict())
+            model.eval()
+            val_preds, val_labels = [], []
+            with torch.no_grad():
+                for images, labels, _ in val_loader:
+                    images = images.to(device)
+                    logits = model(images)
+                    val_preds.extend(logits.argmax(1).cpu().numpy())
+                    val_labels.extend(labels.numpy())
+                    
+            val_acc, _, _ = calculate_all_metrics(np.array(val_labels), np.array(val_preds), CLASS_NAMES)
+            print(f"Phase {phase} | {config_name} | Seed {seed} | Epoch {epoch+1:02d}/{MAX_EPOCHS} | Val Acc: {val_acc:.4f}")
+            
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                best_state = copy.deepcopy(model.state_dict())
             
     # Evaluate on test with best model
     model.load_state_dict(best_state)
